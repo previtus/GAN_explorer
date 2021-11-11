@@ -560,6 +560,8 @@ class Interaction_Handler(object):
             print("Saving in good quality as ", filename)
 
             cv2.imwrite(filename, image)
+            np.savetxt(filename.replace(".png",".txt"), latents[0]) # also save the latent
+
             #"""
 
             # Single plot save!

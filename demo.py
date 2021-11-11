@@ -11,7 +11,7 @@ parser = argparse.ArgumentParser(description='Project: GAN Explorer.')
 # python demo.py -h -> prints out help
 parser.add_argument('-mode', help='Mode under which we run GAN Explorer ("explore" - explore the latent space and use techniques such as Convolutional Layer Reconnection / "listen" - OSC signal listener mode, audio-visual demo (see the readme)). Defaults to "explore".', default='explore')
 parser.add_argument('-network', help='Path to the model (.pkl file) - this can be a pretrained ProgressiveGAN model, or just the Generator network (Gs).', default='models/karras2018iclr-lsun-car-256x256.pkl')
-parser.add_argument('-architecture', help='GAN architecture type (support for "ProgressiveGAN"; work-in-progress also "StyleGAN2"). Defaults to "ProgressiveGAN".', default='ProgressiveGAN')
+parser.add_argument('-architecture', help='GAN architecture type (support for "ProgressiveGAN"; work-in-progress also "StyleGAN2" which also works the same for "StyleGAN2ada"). Defaults to "ProgressiveGAN".', default='ProgressiveGAN')
 parser.add_argument('-steps_speed', help='Interpolation speed - steps_speed controls how many steps each transition between two samples will have (large number => smoother interpolation, slower run). Suggested 60 (mid-end) or 120 (high-end). Defaults to 60.', default='60')
 parser.add_argument('-conv_reconnect_str', help='Strength of one Convolutional Layer Reconnection effect (0.3 defaults to 30 percent of the connections being reconnected in each click).', default='0.3')
 
@@ -71,10 +71,9 @@ if __name__ == '__main__':
         if "-256x256.pkl" in args.model_path:
             interaction_handler.plotter.font_multiplier = 0.25
     ### StyleGAN2 layer naming is different:
-    if args.architecture == "StyleGAN2":
+    if args.architecture == "StyleGAN2" or args.architecture == "StyleGAN2ada":
         interaction_handler.target_tensors = ["G_synthesis/"+tensor.replace("Conv0", "Conv0_up") for tensor in interaction_handler.target_tensors]
         interaction_handler.plotter.target_tensors = ["G_synthesis/"+tensor.replace("Conv0", "Conv0_up") for tensor in interaction_handler.plotter.target_tensors]
-
 
     # plotter allowed only in local run
     if not server_deployed:

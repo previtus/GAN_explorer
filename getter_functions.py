@@ -42,7 +42,7 @@ class Getter(object):
         if not self.USE_SERVER_INSTEAD:
             if self.architecture == "ProgressiveGAN":
                 self.serverside_handler = progressive_gan_handler.ProgressiveGAN_Handler(settings, args)
-            if self.architecture == "StyleGAN2":
+            if self.architecture == "StyleGAN2" or self.architecture == "StyleGAN2ada":
                 import stylegan2_handler
                 self.serverside_handler = stylegan2_handler.StyleGAN2_Handler(settings, args)
 

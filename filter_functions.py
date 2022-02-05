@@ -1,11 +1,17 @@
 import numpy as np
 from utils.rgb2gray import rgb2gray_approx, rgb2gray
+from utils.auto_contrast import auto_contrast
 
 def inverse_image(image):
     return np.invert(image)
 
+def contrast_image(image):
+    # auto contrast proposed by GANscapes, like Adjust Levels in Photoshop
+    # (drops fps by half though)
+    # ps: with my models it makes things bright (maybe uncomfortably so), but that kinda works when it's later inverted...
+    return auto_contrast(image)
+
 def grayscale_image(image):
-    #print(image.shape, type(image), image.dtype, "min, mean, max", np.min(image), np.mean(image), np.max(image))
     gray_1ch = rgb2gray_approx(image).astype(np.uint8)
     return np.stack((gray_1ch,)*3, axis=-1) # back to to 3 channels
 
@@ -24,6 +30,7 @@ class Filters_Handler(object):
         self.grayscale = False
         self.grayscale_slow = False
         self.inverse = False
+        self.contrast = False
 
     def num_to_filter(self, number):
         if number == 1:
@@ -32,6 +39,9 @@ class Filters_Handler(object):
         elif number == 2:
             print("2 = Grayscale")
             self.grayscale = not self.grayscale
+        elif number == 3:
+            print("3 = Contrast")
+            self.contrast = not self.contrast
 
         elif number == 9: ### kept at the end, only for properness of bw transforms ...
             print("9 = Grayscale (slow)")
@@ -47,10 +57,14 @@ class Filters_Handler(object):
         # - grayscale
         # - inverse
 
+        if self.contrast:
+            image = contrast_image(image)
+
         if self.grayscale:
             image = grayscale_image(image)
         if self.grayscale_slow:
             image = grayscale_image_proper_but_slow(image)
+
         if self.inverse:
             image = inverse_image(image)
 

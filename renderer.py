@@ -133,7 +133,8 @@ class Renderer(object):
             nums = [str(i) for i in list(range(0,10))]
             allowed_keys = ["w","s","a","d", # movement
                             "n", " ",
-                            "f","g","t","h","u","j", # nn hacks and restore (j)
+                            "f", # filters ON/OFF
+                            "b","g","t","h","u","j", # nn hacks and restore (j)
                             "y", # nn hacks - simulation of a normal random weights replacement
                             "l", "k", # save load latents
                             "m", # reorder latents
@@ -200,7 +201,8 @@ class Renderer(object):
         nums = [str(i) for i in list(range(0,10))]
         allowed_keys = ["w","s","a","d", # movement
                             "n", " ",
-                            "f","g","t","h","u","j", # nn hacks and restore (j)
+                            "f", # filters ON/OFF
+                            "b","g","t","h","u","j", # nn hacks and restore (j)
                             "y", # nn hacks - simulation of a normal random weights replacement
                             "l", "k", # save load latents
                             "m", # reorder latents
@@ -210,6 +212,7 @@ class Renderer(object):
                             "o", # debug key to run custom commands
                             "+", "-", "*",
                             "=", # interpolate
+                            "`", # autonomous mode
                             "]", 'x', "z"] + nums
         if key_code not in allowed_keys:
                 print("not allowed key detected:",key_code)
@@ -289,7 +292,10 @@ class Renderer(object):
                  " - SHIFT: toggles save or load",
                  " - 0-9: save to/load from a slot number 0-9",
                  " - v: FPS on/off",
-                 " - fg (t) h: NN hacks",
+                 " - bg (t) h: NN hacks",
+                 " - j: restore from NN hacks",
+                 " - f: post-processing filters ON/OFF",
+                 
                  "", "", "", "", "", "", "", "", "[[ Press space to continue ... ]]"]
 
 

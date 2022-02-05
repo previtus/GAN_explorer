@@ -9,6 +9,7 @@ import glob
 import renderer
 import reconnector
 import plotter
+import filter_functions
 
 from tqdm import tqdm
 
@@ -51,6 +52,11 @@ class Interaction_Handler(object):
 
         # plotting:
         self.plotter = plotter.Plotter(self.renderer, getter)
+
+        # post-processing filters
+        self.filter_postprocessing = False
+        self.filters_handler = filter_functions.Filters_Handler()
+
 
     # v0 - pure random
     def get_random_image(self, counter):
@@ -224,6 +230,7 @@ class Interaction_Handler(object):
         save_frame_to_file = False
 
         # Save & Load - shift or z
+        # 1-9 also for filters ...
         if key_ord is 225 or key_ord is 226 or key_code == "z":
             self.SHIFT = not self.SHIFT
             print("Saving ON?:", self.SHIFT)
@@ -231,19 +238,26 @@ class Interaction_Handler(object):
             self.ALT = not self.ALT
 
         nums = [str(i) for i in list(range(0,9))]
-        if self.SHIFT and key_code in nums:
-            # SAVE on position
-            save_to_i = int(key_code)
-            print("saving to ", save_to_i)
-            message = "Saved to "+str(save_to_i)
-            self.saved[save_to_i] = np.copy(self.p0)
-        if not self.SHIFT and key_code in nums:
-            # LOAD from position
-            load_from_i = int(key_code)
-            print("loading from ", load_from_i)
-            message = "Loading from " + str(load_from_i)
-            if self.saved[load_from_i] is not None:
-                self.p0 = self.saved[load_from_i]
+        if key_code in nums:
+            if not self.filter_postprocessing:
+                # Filter controls are OFF, numpad is used for loading / saving
+                if self.SHIFT:
+                    # SAVE on position
+                    save_to_i = int(key_code)
+                    print("saving to ", save_to_i)
+                    message = "Saved to "+str(save_to_i)
+                    self.saved[save_to_i] = np.copy(self.p0)
+                if not self.SHIFT:
+                    # LOAD from position
+                    load_from_i = int(key_code)
+                    print("loading from ", load_from_i)
+                    message = "Loading from " + str(load_from_i)
+                    if self.saved[load_from_i] is not None:
+                        self.p0 = self.saved[load_from_i]
+            else:
+                # Filter controls are ON, numpad is used for turning on and off certain filters!
+                key_as_i = int(key_code)
+                self.filters_handler.num_to_filter(key_as_i)
 
         # Automatic mode:
         if key_code == "`" or self.start_in_autonomous_mode:
@@ -407,10 +421,14 @@ class Interaction_Handler(object):
                 cv2.imwrite(filename, image)
 
 
-        # f / g Allow editing of the GAN network weights on the fly!
+        if key_code == "f":
+            self.filter_postprocessing = not self.filter_postprocessing
+            print("Filters ON/OFF:", self.filter_postprocessing)
+
+        # b / g Allow editing of the GAN network weights on the fly!
         # t swaps which tensor this influences
 
-        if key_code == "f":
+        if key_code == "b":
             target_tensor = self.target_tensors[self.target_tensor]
             #self.multiplier_value += 0.1
             self.multiplier_value *= 1.5
@@ -541,6 +559,8 @@ class Interaction_Handler(object):
 
         image = self.getter.latent_to_image_localServerSwitch(latents)
 
+        if self.filter_postprocessing:
+            image = self.filters_handler.apply_all_filters(image)
 
         # Simple save in HQ (post-render)
         if save_frame_to_file:

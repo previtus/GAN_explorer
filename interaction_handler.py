@@ -267,7 +267,17 @@ class Interaction_Handler(object):
 
             if self.autonomous_mode:
                 self.saved = [] # flush previous latents
-                how_many = 100
+                how_many = 150
+
+                # Timing @ 30fps
+                #  10 corresponds to 20 sec
+                              # 30 corresponds to 1 min
+                              # 150 to 5 min
+                # Timing @ 20fps
+                #  10 corresponds to 31 sec
+                              # 20 corresponds to 1 ~min
+                              # 100 to ~5 min
+                              # 150 = 7.5min
                 latents = np.random.randn(how_many, self.latent_vector_size)
                 self.saved = latents
 
@@ -416,7 +426,7 @@ class Interaction_Handler(object):
                 folder = "renders-debug/"
                 if not os.path.exists(folder): os.mkdir(folder)
 
-                filename = folder+"saved_" + str(i_steps).zfill(4) + ".png"
+                filename = folder+"saved_" + str(i_steps).zfill(6) + ".png"
                 print("Saving in good quality as ", filename)
                 cv2.imwrite(filename, image)
 
@@ -515,7 +525,7 @@ class Interaction_Handler(object):
 
             for latent in self.saved:
                 if latent is not None:
-                    target = path+str(max_file_int).zfill(5)
+                    target = path+str(max_file_int).zfill(6)
                     print("Saving to", target)
 
                     np.savetxt(target+".txt", latent)
@@ -575,7 +585,7 @@ class Interaction_Handler(object):
             if not os.path.exists(folder):
                 os.mkdir(folder)
 
-            filename = folder+"saved_" + str(self.saved_already).zfill(4) + ".png"
+            filename = folder+"saved_" + str(self.saved_already).zfill(6) + ".png"
             self.saved_already += 1
             print("Saving in good quality as ", filename)
 

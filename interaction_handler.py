@@ -547,10 +547,21 @@ class Interaction_Handler(object):
             if not os.path.exists(path):
                 os.mkdir(path)
 
+
+            print("before")
             for file in os.listdir(path):
                 if file.endswith(".txt"):
+                    print(file)
                     latent = np.loadtxt(os.path.join(path, file))
                     self.saved.append(latent)
+            self.saved = []
+
+            print("better")
+            lats = sorted([str(file) for file in os.listdir(path) if file.endswith(".txt")])
+            for file in lats:
+                print(file)
+                latent = np.loadtxt(os.path.join(path, file))
+                self.saved.append(latent)
 
             print("Loaded in total:", len(self.saved))
             while len(self.saved) < 10:

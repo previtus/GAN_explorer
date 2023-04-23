@@ -34,7 +34,8 @@ class Interaction_Handler(object):
         self.counter_start = 0
         self.autonomous_mode = False
         self.start_in_autonomous_mode = start_in_autonomous_mode
-
+        self.rand_jump_alpha = 0.02
+        
         self.latent_vector_size = 512
         self.saved_already = 0
 
@@ -368,8 +369,7 @@ class Interaction_Handler(object):
             save_p0 = self.p0
             self.shuffle_random_points(self.steps)
 
-            alpha = 0.02
-            self.p0 = (1.0 - alpha) * save_p0 + alpha*self.p0
+            self.p0 = (1.0 - self.rand_jump_alpha) * save_p0 + self.rand_jump_alpha*self.p0
 
         # AD => selecting a feature (0 to self.latent_vector_size and then loop)
         if key_code == "a" or key_code == "d":

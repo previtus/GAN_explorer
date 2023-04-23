@@ -14,6 +14,7 @@ parser.add_argument('-network', help='Path to the model (.pkl file) - this can b
 parser.add_argument('-architecture', help='GAN architecture type (support for "ProgressiveGAN"; work-in-progress also "StyleGAN2" which also works the same for "StyleGAN2ada"). Defaults to "ProgressiveGAN".', default='ProgressiveGAN')
 parser.add_argument('-steps_speed', help='Interpolation speed - steps_speed controls how many steps each transition between two samples will have (large number => smoother interpolation, slower run). Suggested 60 (mid-end) or 120 (high-end). Defaults to 60.', default='60')
 parser.add_argument('-conv_reconnect_str', help='Strength of one Convolutional Layer Reconnection effect (0.3 defaults to 30 percent of the connections being reconnected in each click).', default='0.3')
+parser.add_argument('-rand_jump_alpha', help='How large will the random jumps be (default 0.02 as in 2 percent of a new random point)', default='0.02')
 
 parser.add_argument('-deploy', help='Optional mode to depend on a deployed run of the Server.py code (see python server.py -h for more).', default='False')
 parser.add_argument('-port', help='Server runs on this port. Defaults to 8000 (this uses the link "http://localhost:"+PORT+"/get_image" for rest calls. Use SSH tunel.', default='8000')
@@ -57,6 +58,7 @@ if __name__ == '__main__':
     getter = Getter(args, USE_SERVER_INSTEAD=server_deployed, PORT=port)
     initial_resolution = 1024
     fullscreen = str(args_main.fullscreen)
+    rand_jump_alpha = float(args_main.rand_jump_alpha)
     skip_intro = (args_main.skip_intro == "True")
 
     interaction_handler = Interaction_Handler(getter, initial_resolution, fullscreen, start_in_autonomous_mode=skip_intro)
@@ -95,5 +97,6 @@ if __name__ == '__main__':
         interaction_handler.start_renderer_interpolation_interact()
 
     elif version == "v2":
+        interaction_handler.rand_jump_alpha = rand_jump_alpha
         interaction_handler.shuffle_random_points(steps=steps_speed)
         interaction_handler.start_renderer_key_interact(skip_intro=skip_intro)

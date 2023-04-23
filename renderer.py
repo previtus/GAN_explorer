@@ -315,7 +315,7 @@ class Renderer(object):
             #times = 3
             #frame_dynamic = self.make_a_grid(get_grid_image_function, times, times, int(resolution / times))
 
-            if True: # always show the initial message
+            if not self.show_fps:
                 left = 100
                 top = 140
                 title = True

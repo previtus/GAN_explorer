@@ -58,6 +58,8 @@ class Interaction_Handler(object):
         self.filter_postprocessing = False
         self.filters_handler = filter_functions.Filters_Handler()
 
+        # flag to get to the next latent
+        self.get_to_the_next_latent = False
 
     # v0 - pure random
     def get_random_image(self, counter):
@@ -205,6 +207,11 @@ class Interaction_Handler(object):
                 self.saved_second_index_selected = valid_indices[position_of_the_second_one]
 
             print("set indices as self.saved_first_index_selected=",self.saved_first_index_selected,", self.saved_second_index_selected=",self.saved_second_index_selected)
+            # Now we are at the end of one interval
+            if self.get_to_the_next_latent:
+                # If we were just getting to the next latent, we can stop here ...
+                self.get_to_the_next_latent = False
+                self.game_is_in_interpolating_mode = False
 
         if (not last_index == -1) and valid_indices[1] == self.saved_second_index_selected:
             print("LAST FRAME")
@@ -259,6 +266,13 @@ class Interaction_Handler(object):
                 # Filter controls are ON, numpad is used for turning on and off certain filters!
                 key_as_i = int(key_code)
                 self.filters_handler.num_to_filter(key_as_i)
+
+        # Get to the next latent point
+        if key_code == "/":
+            self.get_to_the_next_latent = not self.get_to_the_next_latent
+            if self.get_to_the_next_latent:
+                print("< Will interpolate to the next latent")
+                self.game_is_in_interpolating_mode = True
 
         # Automatic mode:
         if key_code == "`" or self.start_in_autonomous_mode:
@@ -334,9 +348,8 @@ class Interaction_Handler(object):
             if self.step == 0:
                 self.select_saved_latents()
                 #self.shuffle_random_points(self.steps)
+
             self.p = self.calculate_p(step=self.step)
-
-
 
         # Start recording / Stop recording
         # save every new image we get into /renders folder

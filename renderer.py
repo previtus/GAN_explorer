@@ -141,6 +141,7 @@ class Renderer(object):
                             "p", # plots
                             "r", # random jump
                             "e",
+                            "/", # interpolate to the next latent command
                             "o", # debug key to run custom commands
                             "+", "-", "*",
                             "=", # interpolate

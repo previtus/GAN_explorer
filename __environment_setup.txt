@@ -21,6 +21,9 @@ mamba install -c conda-forge requests==2.24.0 matplotlib==3.3.2 Pillow==8.0.1 mo
 pip install opencv-python==4.4.0.46 oscpy==0.5.0
 pip install tensorflow-gpu==1.14.0
 
+pip install jupyter
+
+
 (skipping) pip install pygame
 
 (last step - download the dnnlib from stylegan2 repo)

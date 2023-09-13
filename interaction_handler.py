@@ -18,6 +18,13 @@ SIGNAL_interactive_i = 0.0
 SIGNAL_reset_toggle = 0
 SIGNAL_latents = []
 
+# not to loose one's mind after loosing a sample!
+# with this set to True, we save every image we get to after clicking space
+# this is handy for tracking down some elusive glitches!
+SPECIAL_SAVE_EVERY_SPACE = True
+# for normal life though, keep it to False:
+SPECIAL_SAVE_EVERY_SPACE = False
+
 
 class Interaction_Handler(object):
     """
@@ -235,6 +242,8 @@ class Interaction_Handler(object):
         #if key_ord is not -1:
         #    print("key pressed (code, ord)", key_code, key_ord)
         message = ""
+        folder = "renders/" # where to save renders
+
         save_frame_to_file = False
 
         # Save & Load - shift or z
@@ -384,6 +393,11 @@ class Interaction_Handler(object):
 
             self.p0 = (1.0 - self.rand_jump_alpha) * save_p0 + self.rand_jump_alpha*self.p0
 
+            if SPECIAL_SAVE_EVERY_SPACE:
+                folder = "spacerenders/"
+                save_frame_to_file = True
+
+
         # AD => selecting a feature (0 to self.latent_vector_size and then loop)
         if key_code == "a" or key_code == "d":
             message = "a"
@@ -436,10 +450,10 @@ class Interaction_Handler(object):
                 latents = np.asarray([self.p0])
                 image = self.getter.latent_to_image_localServerSwitch(latents)
 
-                folder = "renders-debug/"
-                if not os.path.exists(folder): os.mkdir(folder)
+                folder_d = "renders-debug/"
+                if not os.path.exists(folder_d): os.mkdir(folder_d)
 
-                filename = folder+"saved_" + str(i_steps).zfill(6) + ".png"
+                filename = folder_d+"saved_" + str(i_steps).zfill(6) + ".png"
                 print("Saving in good quality as ", filename)
                 cv2.imwrite(filename, image)
 
@@ -601,11 +615,11 @@ class Interaction_Handler(object):
             # Single file save:
             #"""
             message = "Saved file"
-            folder = "renders/"
             if not os.path.exists(folder):
                 os.mkdir(folder)
             name = self.getter.model_name_id
-            folder = "renders/" + name + "/"
+            if not SPECIAL_SAVE_EVERY_SPACE:
+                folder = "renders/" + name + "/"
             if not os.path.exists(folder):
                 os.mkdir(folder)
 

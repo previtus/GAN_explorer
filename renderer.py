@@ -142,11 +142,12 @@ class Renderer(object):
                             "r", # random jump
                             "e",
                             "/", # interpolate to the next latent command
+                            "\\","z", # prev/next preloaded multinet
                             "o", # debug key to run custom commands
                             "+", "-", "*",
                             "=", # interpolate
                             "`", # autonomous mode
-                            "]", 'x', "z"] + nums
+                            "]", 'x'] + nums
             allowed_keys_ord = [ord(k) for k in allowed_keys]
             if key in allowed_keys_ord:
                 key_code = chr(key)

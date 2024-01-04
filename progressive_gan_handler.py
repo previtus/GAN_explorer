@@ -201,14 +201,18 @@ class ProgressiveGAN_Handler(object):
         print("Successfully loaded ", len(self.multiple_nets), "additional nets!")
 
         # We can preload them like this:
-        for i in range(len(self.multiple_nets)):
-            self.cycle_multi_nets()
-            self.infer(self._example_input, verbose=False)
+        preload = True # slower window load, but then very speedy cycling ...
+        if preload:
+            for i in range(len(self.multiple_nets)):
+                self.cycle_multi_nets()
+                self.infer(self._example_input, verbose=False)
 
-    def cycle_multi_nets(self):
-        multiple_nets_i = self.multiple_nets_i + 1
+    def cycle_multi_nets(self, direction=1):
+        multiple_nets_i = self.multiple_nets_i + direction
         if multiple_nets_i >= len(self.multiple_nets):
             multiple_nets_i = 0
+        if multiple_nets_i < 0:
+            multiple_nets_i = len(self.multiple_nets)-1
         to_load = self.multiple_nets[multiple_nets_i]
 
         print("Cycled the Generator network!")

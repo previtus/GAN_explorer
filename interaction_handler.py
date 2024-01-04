@@ -376,7 +376,14 @@ class Interaction_Handler(object):
                 print("Multi-loaded networks not used!")
             else:
                 print("Cycling through the multi-loaded networks:")
-                self.getter.serverside_handler.cycle_multi_nets()
+                self.getter.serverside_handler.cycle_multi_nets(+1)
+
+        if key_code == "\\":
+            if self.getter.serverside_handler.multiple_nets is None:
+                print("Multi-loaded networks not used!")
+            else:
+                print("Cycling through the multi-loaded networks:")
+                self.getter.serverside_handler.cycle_multi_nets(-1)
 
 
         # Random jump

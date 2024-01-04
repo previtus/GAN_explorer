@@ -34,8 +34,25 @@ class ProgressiveGAN_Handler(object):
         self._example_input = self.example_input(verbose=False)
         self._example_output = self.infer(self._example_input, verbose=False)
 
+        # Load other networks (if we set these)
+        self.multiple_nets_paths = args.multiple_nets
+        self.multiple_nets = None
+        if self.multiple_nets_paths is not "":
+            self.prepare_multiple_nets()
+
         # Network altering:
         self.original_weights = {}
+
+    def load_model(self,path):
+        #tf.InteractiveSession()
+        with open(path, 'rb') as file:
+            loaded_networks = pickle.load(file)
+            if isinstance(loaded_networks, tuple):
+                # Original model saves a tuple (Generator, Discriminator, weighted avg Generator)
+                _G, _D, _Gs = loaded_networks
+            else:
+                _Gs = loaded_networks
+        return _Gs
 
     def _create_model(self, model_path):
         tf.InteractiveSession()
@@ -167,6 +184,36 @@ class ProgressiveGAN_Handler(object):
         print(self._Gs)
         print("#############")
 
+    def prepare_multiple_nets(self):
+        multiple_nets = str(self.multiple_nets_paths).split(",")
+        print("Loading multiple nets from", len(multiple_nets), "additional nets:")
+
+        self.multiple_nets = []
+        self.multiple_nets_i = 0 # marks the currently loaded net ...
+        self.multiple_nets.append(self._Gs)
+
+        for path in multiple_nets:
+            print("-", path)
+
+            generator_net = self.load_model(path)
+            self.multiple_nets.append(generator_net)
+
+        print("Successfully loaded ", len(self.multiple_nets), "additional nets!")
+
+        # We can preload them like this:
+        for i in range(len(self.multiple_nets)):
+            self.cycle_multi_nets()
+            self.infer(self._example_input, verbose=False)
+
+    def cycle_multi_nets(self):
+        multiple_nets_i = self.multiple_nets_i + 1
+        if multiple_nets_i >= len(self.multiple_nets):
+            multiple_nets_i = 0
+        to_load = self.multiple_nets[multiple_nets_i]
+
+        print("Cycled the Generator network!")
+        self._Gs = to_load
+        self.multiple_nets_i = multiple_nets_i
 
 # Example of usage:
 """

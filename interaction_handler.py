@@ -246,9 +246,9 @@ class Interaction_Handler(object):
 
         save_frame_to_file = False
 
-        # Save & Load - shift or z
+        # Save & Load - shift
         # 1-9 also for filters ...
-        if key_ord is 225 or key_ord is 226 or key_code == "z":
+        if key_ord is 225 or key_ord is 226: #  or key_code == "z"
             self.SHIFT = not self.SHIFT
             print("Saving ON?:", self.SHIFT)
         if key_ord is 233 or key_ord is 234:
@@ -370,6 +370,13 @@ class Interaction_Handler(object):
         if key_code == "n":
             print("Noise relevant to StyleGan2 toggled")
             self.getter.toggleStylegan2Noise()
+
+        if key_code == "z":
+            if self.getter.serverside_handler.multiple_nets is None:
+                print("Multi-loaded networks not used!")
+            else:
+                print("Cycling through the multi-loaded networks:")
+                self.getter.serverside_handler.cycle_multi_nets()
 
 
         # Random jump

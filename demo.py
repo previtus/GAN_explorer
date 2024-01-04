@@ -22,6 +22,10 @@ parser.add_argument('-port', help='Server runs on this port. Defaults to 8000 (t
 parser.add_argument('-fullscreen', help='Start Fullscreen? ("full" - fullscreen, "resize" - resizeable window, otherwise fixed resolution 1024)', default='None')
 parser.add_argument('-skip_intro', help='Directly into game?.', default='False')
 
+parser.add_argument('-multiple_nets', help='Paths to also load, separated by comma (dont have those in your path)', default='')
+# Example usage:
+# (gan_explorer) vitek@vitek-blade:~/Vitek/Art/GAN_explorer$ python demo.py -network models/_model_downloads_/progressive_growing_of_gans-CuriosityHazCam/lucky_number/CuriosityHazCam-013170-luckyNum.pkl -steps_speed 180 -multiple_nets models/_model_downloads_/progressive_growing_of_gans-CuriosityNavCam/CuriosityNavCam-012670-MeneVyrazny_AleDobryStrojAKrajina_A2.pkl,models/_model_downloads_/progressive_growing_of_gans-CuriosityChemCam/CuriosityChemCam-012270-plus_B.pkl
+
 
 if __name__ == '__main__':
     args_main = parser.parse_args()
@@ -36,6 +40,8 @@ if __name__ == '__main__':
         args.model_path = "networks/net.pkl"
     else:
         args.model_path = str(args_main.network)
+
+    args.multiple_nets = str(args_main.multiple_nets)
 
     #####################
     # Local override
@@ -100,3 +106,4 @@ if __name__ == '__main__':
         interaction_handler.rand_jump_alpha = rand_jump_alpha
         interaction_handler.shuffle_random_points(steps=steps_speed)
         interaction_handler.start_renderer_key_interact(skip_intro=skip_intro)
+

@@ -47,6 +47,13 @@ class StyleGAN2_Handler(object):
         # Load and create a model
         self._create_model(args.model_path)
 
+        # Load other networks (if we set these)
+        self.multiple_nets_paths = args.multiple_nets
+        self.multiple_nets = None
+        if self.multiple_nets_paths is not "":
+            # TODO!
+            pass
+
         self.latent_vector_size = self._Gs.input_shapes[0][1:][0]
 
         # Infer once to build up the graph (takes like 2 sec extra time is the first one)

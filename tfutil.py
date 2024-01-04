@@ -857,3 +857,363 @@ class Network:
                 tf.summary.histogram(name, var)
 
 #----------------------------------------------------------------------------
+
+    # ----------------------------------------------------------------------------
+    # receives an image path and extracts 4096 VGG's last layer features
+    def find_vgg_features_tf(self, img):
+
+        input_img = tf.transpose(img, [0, 3, 2, 1])
+        input_img = tf.transpose(input_img, [0, 2, 1, 3])
+        input_img = tf.image.resize_images(input_img, (224, 224))
+
+        with tf.gfile.FastGFile('VGG16_beauty_rates.pt', 'rb') as model_file: # this might be scuffed tbh...
+            graph_def = tf.GraphDef()
+            graph_def.ParseFromString(model_file.read())
+
+        print("---")
+        print(graph_def)
+        for op in graph_def.get_operations():
+            print(op.name)
+        print("---")
+
+        output = tf.import_graph_def(graph_def, input_map={'zero_padding2d_1_input:0': input_img},
+                                     return_elements=['conv2d_16/BiasAdd:0'], name='')
+
+        return output[0]
+
+    # This function takes all that run takes + etalons and finds the latents
+    # that approximate the etalon images.
+    # to use call: Gs.reverse_gan_for_etalons(latents, labels, etalons)
+    # where etalons.shape is for eg. (?, 1024, 1024, 3) ~ [-1:1]
+    # Returns the history of latents with the last solution being the best.
+    def reverse_gan_for_etalons_v2(self,
+                                *in_arrays,  # Expects start values of latents, any labels and etalon images.
+                                # results_dir,  # Source directory to import the G
+                                # dest_dir,  # target directory to save the outputs
+                                iters,  # Number of iterations
+                                learning_rate,  # Initial learning rate
+                                alpha,  # Weight of normal loss in relation to vgg loss
+                                # iterations_to_save=2000,
+                                stohastic_clipping=True,
+                                return_as_list=False,
+                                # True = return a list of NumPy arrays, False = return a single NumPy array, or a tuple if there are multiple outputs.
+                                print_progress=False,
+                                # Print progress to the console? Useful for very large input arrays.
+                                minibatch_size=None,  # Maximum minibatch size to use, None = disable batching.
+                                num_gpus=1,  # Number of GPUs to use.
+                                out_mul=1.0,  # Multiplicative constant to apply to the output(s).
+                                out_add=0.0,  # Additive constant to apply to the output(s).
+                                out_shrink=1,  # Shrink the spatial dimensions of the output(s) by the given factor.
+                                out_dtype=None,  # Convert the output to the specified data type.
+                                **dynamic_kwargs):  # Additional keyword arguments to pass into the network construction function.
+
+        assert len(in_arrays) == 3
+        num_items = in_arrays[0].shape[0]
+        if minibatch_size is None:
+            minibatch_size = num_items
+        key = str([list(sorted(dynamic_kwargs.items())),
+                   num_gpus,
+                   out_mul,
+                   out_add,
+                   out_shrink,
+                   out_dtype])
+
+        # Build graph. Same is in Run fuction.
+        if key not in self._run_cache:
+            with absolute_name_scope(self.scope + '/Run'), tf.control_dependencies(None):
+                in_split = list(zip(*[tf.split(x, num_gpus) for x in self.input_templates]))
+
+                out_split = []
+                for gpu in range(num_gpus):
+                    with tf.device('/gpu:%d' % gpu):
+                        out_expr = self.get_output_for(*in_split[gpu],
+                                                       return_as_list=True,
+                                                       **dynamic_kwargs)
+                        if out_mul != 1.0:
+                            out_expr = [x * out_mul for x in out_expr]
+                        if out_add != 0.0:
+                            out_expr = [x + out_add for x in out_expr]
+                        if out_shrink > 1:
+                            ksize = [1, 1, out_shrink, out_shrink]
+                            out_expr = [tf.nn.avg_pool(x,
+                                                       ksize=ksize,
+                                                       strides=ksize,
+                                                       padding='VALID',
+                                                       data_format='NCHW') for x in out_expr]
+                        if out_dtype is not None:
+                            if tf.as_dtype(out_dtype).is_integer:
+                                out_expr = [tf.round(x) for x in out_expr]
+                            out_expr = [tf.saturate_cast(x, out_dtype) for x in out_expr]
+                        out_split.append(out_expr)
+                self._run_cache[key] = [tf.concat(outputs, axis=0) for outputs in zip(*out_split)]
+
+        # Output tensor and GT tensor
+        out_expr = self._run_cache[key]
+        psy_name = str(self.scope + '/etalon')
+        psy = tf.placeholder(tf.float32, out_expr[0].shape, name=psy_name)
+
+        # Loss function: alpha*MSELoss + (1-alpha)*VGGLoss
+        """ for debug block
+        loss = alpha * (tf.losses.mean_squared_error(labels=psy, predictions=out_expr[0])) + (1 - alpha) * (
+            tf.losses.mean_squared_error(labels=self.find_vgg_features_tf(psy),
+                                         predictions=self.find_vgg_features_tf(out_expr[0])))
+        """
+        # Loss function: alpha*MSELoss basically ....
+        loss = alpha * (tf.losses.mean_squared_error(labels=psy, predictions=out_expr[0]))
+
+
+        latents_name = self.input_templates[0].name
+        input_latents = tf.get_default_graph().get_tensor_by_name(latents_name)
+        labels_name = self.input_templates[1].name
+        input_labels = tf.get_default_graph().get_tensor_by_name(labels_name)
+
+        # Gradients computation
+        latents_gradient = tf.gradients(loss, input_latents)
+        labels_gradient = tf.gradients(loss, input_labels)
+        gradient = tf.concat([latents_gradient, labels_gradient], 2)
+
+        # We modify existing template to feed etalons
+        # into the loss and gradient tensors:
+        templ = self.input_templates
+        templ.append(psy)
+        # Create a new feed dictionary:
+        feed_dict = dict(zip(templ, in_arrays))
+        # Return loss and the gradient with it's feed dictionary
+        l_rate = learning_rate
+        latents = in_arrays[0]
+        labels = in_arrays[1]
+        samples_num = latents.shape[0]
+
+        # for recording the story of iterations
+        history = []
+        c_min = 1e+9
+        x_min = None
+        x_min = None
+        # G, D, Gs = misc.load_network_pkl(results_dir, None)
+
+        # Here is main optimisation logic. Stohastic clipping is
+        # from 'Precise Recovery of Latent Vectors from Generative
+        # Adversarial Networks', ICLR 2017 workshop track
+        # [arxiv]. https://arxiv.org/abs/1702.04782
+        for i in range(iters):
+
+            g = tf.get_default_session().run(
+                [loss, gradient],
+                feed_dict=feed_dict)
+
+            g_latents = np.expand_dims(g[1][0][0][:512], 0)
+            g_labels = np.expand_dims(g[1][0][0][512:], 0)
+
+            latents = latents - l_rate * g_latents
+            labels = labels - l_rate * g_labels
+
+            # Standard clipping
+            if stohastic_clipping:
+                # Stohastic clipping
+                for j in range(samples_num):
+
+                    edge1 = np.where(latents[j] >= 1.)[0]
+                    edge2 = np.where(latents[j] <= -1)[0]
+                    if edge1.shape[0] > 0:
+                        rand_el1 = np.random.uniform(-1, 1, size=(1, edge1.shape[0]))
+                        latents[j, edge1] = rand_el1
+                    if edge2.shape[0] > 0:
+                        rand_el2 = np.random.uniform(-1, 1, size=(1, edge2.shape[0]))
+                        latents[j, edge2] = rand_el2
+
+                    edge1 = np.where(labels[j] > 1.)[0]
+                    edge2 = np.where(labels[j] < 0.)[0]
+                    if edge1.shape[0] > 0:
+                        rand_el1 = np.random.uniform(-1, 1, size=(1, edge1.shape[0]))
+                        labels[j, edge1] = rand_el1
+                    if edge2.shape[0] > 0:
+                        rand_el2 = np.random.uniform(-1, 1, size=(1, edge2.shape[0]))
+                        labels[j, edge2] = rand_el2
+            else:
+                latents = np.clip(latents, -1, 1)
+                labels = np.clip(labels, 0, 1)
+
+            # Udating the dictionary for next itteration.
+            feed_dict[input_latents] = latents
+            feed_dict[input_labels] = labels
+
+            if g[0] < c_min:
+                # Saving the best latents and labels
+                c_min = g[0]
+                x_min = latents
+                y_min = labels
+
+            if i % 50 == 0 and i != 0:
+                # We reduce the learning rate every 50 iterations
+
+                if i == 1000:
+                    l_rate /= 5
+
+                if i % 20000 == 0:
+                    l_rate /= 2
+                # And record the history
+                history.append((g[0], latents))
+                print(i, g[0] / samples_num)
+                print(labels)
+                print(labels.mean())
+
+            # if i % iterations_to_save == 0 and i > 0:
+            #     print("saving reconstruction output for iteration num {}".format(i))
+            #
+            #     iteration_name = 'best_restored_latent_vector_' + str(i) + '.npy'
+            #     np.save(os.path.join(dest_dir, iteration_name), x_min)
+            #
+            #     for k in range(10):
+            #         y_pred = y_min
+            #         y_pred = y_pred + (k * 0.05)
+            #
+            #         # infer conditioned noise to receive image
+            #         image = Gs.run(x_min, y_pred, minibatch_size=1, num_gpus=1, out_mul=127.5, out_add=127.5,
+            #                        out_shrink=1, out_dtype=np.uint8)
+            #         # save generated image as 'i.png' and noise vector as noise_vector.txt
+            #         misc.save_image_grid(image, os.path.join(dest_dir, '{}_{}.png'.format('%04d' % i, k)), [0, 255],
+            #                              [1, 1])
+
+        # We return back the optimisation history of latents
+        history.append((c_min, x_min))
+        return history
+
+# ----------------------------------------------------------------------------
+
+#----------------------------------------------------------------------------
+# Source: https://github.com/tkarras/progressive_growing_of_gans/pull/4
+    # This function takes all that run takes + etalons and finds the latents
+    # that approximate the etalon images.
+    # to use call: Gs.reverse_gan_for_etalons(latents, labels, etalons)
+    # where etalons.shape is for eg. (?, 1024, 1024, 3) ~ [-1:1]
+    # Returns the history of latents with the last solution being the best.
+    def reverse_gan_for_etalons_v1(self,
+        *in_arrays,                 # Expects start values of latents, any labels and etalon images.
+        itterations = 100,          # How many optimisations itterations to take. Emperical good value is 2000.
+        learning_rate = 0.000001,   # Initial learning rate
+        stohastic_clipping = True,
+        return_as_list  = False,    # True = return a list of NumPy arrays, False = return a single NumPy array, or a tuple if there are multiple outputs.
+        print_progress  = False,    # Print progress to the console? Useful for very large input arrays.
+        minibatch_size  = None,     # Maximum minibatch size to use, None = disable batching.
+        num_gpus        = 1,        # Number of GPUs to use.
+        out_mul         = 1.0,      # Multiplicative constant to apply to the output(s).
+        out_add         = 0.0,      # Additive constant to apply to the output(s).
+        out_shrink      = 1,        # Shrink the spatial dimensions of the output(s) by the given factor.
+        out_dtype       = None,     # Convert the output to the specified data type.
+        **dynamic_kwargs):          # Additional keyword arguments to pass into the network construction function.
+
+        assert len(in_arrays) == 3
+        num_items = in_arrays[0].shape[0]
+        if minibatch_size is None:
+            minibatch_size = num_items
+        key = str([list(sorted(dynamic_kwargs.items())),
+                   num_gpus,
+                   out_mul,
+                   out_add,
+                   out_shrink,
+                   out_dtype])
+        # Build graph. Same is in Run fuction.
+        if key not in self._run_cache:
+            with absolute_name_scope(self.scope + '/Run'), tf.control_dependencies(None):
+                in_split = list(zip(*[tf.split(x, num_gpus) for x in self.input_templates]))
+                out_split = []
+                for gpu in range(num_gpus):
+                    with tf.device('/gpu:%d' % gpu):
+                        out_expr = self.get_output_for(*in_split[gpu],
+                                                       return_as_list=True,
+                                                       **dynamic_kwargs)
+                        if out_mul != 1.0:
+                            out_expr = [x * out_mul for x in out_expr]
+                        if out_add != 0.0:
+                            out_expr = [x + out_add for x in out_expr]
+                        if out_shrink > 1:
+                            ksize = [1, 1, out_shrink, out_shrink]
+                            out_expr = [tf.nn.avg_pool(x,
+                                                       ksize=ksize,
+                                                       strides=ksize,
+                                                       padding='VALID',
+                                                       data_format='NCHW') for x in out_expr]
+                        if out_dtype is not None:
+                            if tf.as_dtype(out_dtype).is_integer:
+                                out_expr = [tf.round(x) for x in out_expr]
+                            out_expr = [tf.saturate_cast(x, out_dtype) for x in out_expr]
+                        out_split.append(out_expr)
+                self._run_cache[key] = [tf.concat(outputs, axis=0) for outputs in zip(*out_split)]
+
+        # UP until now we were making a Tensor for model
+        out_expr = self._run_cache[key]
+        # Let's make a loss function:
+        psy_name = str(self.scope + '/etalon')
+        psy = tf.placeholder(tf.float32, out_expr[0].shape, name=psy_name)
+        # MSE loss for all etalons.
+        loss = tf.reduce_sum(tf.pow(out_expr[0] - psy, 2))
+        # loss = tf.reduce_sum(tf.div(tf.pow(out_expr[0] - psy, 2), 1000.)) # fp16
+
+        latents_name = self.input_templates[0].name
+        input_latents = tf.get_default_graph().get_tensor_by_name(latents_name)
+        # Let's compute the gradient of loss function with regard to input:
+        gradient = tf.gradients(loss, input_latents)
+        # We modify existing template to feed etalons
+        # into the loss and gradient tensors:
+        templ = self.input_templates
+        templ.append(psy)
+        # Create a new feed dictionary:
+        feed_dict = dict(zip(templ, in_arrays))
+        # Return loss and the gradient with it's feed dictionary
+        l_rate = learning_rate
+        latents = in_arrays[0]
+        samples_num = latents.shape[0]
+        print("Batch has {} etalons to reverese.".format(samples_num))
+        # for recording the story of itterations
+        history = []
+        # c_min = 1e+9
+        c_min = 1e+12
+        x_min = None
+        # Here is main optimisation logic. Stohastic clipping is
+        # from 'Precise Recovery of Latent Vectors from Generative
+        # Adversarial Networks', ICLR 2017 workshop track
+        # [arxiv]. https://arxiv.org/abs/1702.04782
+        for i in range(itterations):
+            g = tf.get_default_session().run(
+                [loss, gradient],
+                feed_dict=feed_dict)
+            latents = latents - l_rate * g[1][0]
+            # Standard clipping
+            if stohastic_clipping:
+                # Stohastic clipping
+                for j in range(samples_num):
+                    edge1 = np.where(latents[j] >= 1.)[0]
+                    edge2 = np.where(latents[j] <= -1)[0]
+                    if edge1.shape[0] > 0:
+                        rand_el1 = np.random.uniform(-1,
+                                                     1,
+                                                     size=(1, edge1.shape[0]))
+                        latents[j, edge1] = rand_el1
+                    if edge2.shape[0] > 0:
+                        rand_el2 = np.random.uniform(-1,
+                                                     1,
+                                                     size=(1, edge2.shape[0]))
+                        latents[j, edge2] = rand_el2
+            else:
+                latents = np.clip(latents, -1, 1)
+
+            # Udating the dictionary for next itteration.
+            feed_dict[input_latents] = latents
+
+            if i % 50 == 49:
+                # We reduce the learning rate every 50 itterations
+                learning_rate /= 2
+                # And record the history
+                history.append((g[0], latents))
+                print(i, g[0]/samples_num)
+
+            if g[0] < c_min:
+                # Saving the best latents
+                c_min = g[0]
+                x_min = latents
+
+        # We return back the optimisation history of latents
+        history.append((c_min, x_min))
+        return history
+
+#----------------------------------------------------------------------------
